@@ -49,9 +49,23 @@ Output:
 from __future__ import print_function, division
 import unittest
 from fractions import gcd as get_gcd
+from fractions import Fraction
 from collections import OrderedDict as dict
+import random
 
 thought = """
+Given n pegs := [P1, P2, P3, ... , Pn]
+solve for n gears := [G1, G2, G3, ..., Gn]
+Because we want gear ratio to be 2, so that
+(1.) 2 = (G1 / G2) * (G2 / G3) * (G3 / G4) * ... * (Gn-1 / Gn) = (G1 / Gn)
+
+(2.) Gn = G1 / 2 = |Pn - Pn-1| - Gn-1
+(3.) if i > 1, Gi = |Pi - Pi-1| - Gi-1; if i = 1, Gi = G1
+(4.) G1 = 2 * (|Pn - Pn-1| - Gn-1)
+(5.) x = 2 * [f - e - (e - d - (d - c - (c - b - (b - a - x))))]
+
+
+==== previous ====
 Given n pegs := [p1, p2, p3, ... , pn]
 Calculate n gears (radius) := [G1, G2, G3, ..., Gn]
 and their physical constrains := [G1_min <= G1 <= G1_max, G2_min <= G2 <= G2_max, ..., ]
@@ -73,18 +87,63 @@ From this point, because G1_max and Gn_max potentially got shorter, domino-ly up
 """
 
 
-def simplify(a, b):
-    gcd = get_gcd(a, b)
-    return a // gcd, b // gcd
-
-
 def solution(pegs):
     # Your code here
     n = len(pegs)
     impossible = [-1, -1]
+    if n < 2:
+        return impossible
 
     def gap(_a, _b):
         return pegs[max(_a, _b)] - pegs[min(_a, _b)]
+
+    # (5.) x = 2 * [f - e - (e - d - (d - c - (c - b - (b - a - x))))]
+    # [f - e - (e - d - (d - c - (c - b - (b - a))))]
+    magic_memo = {1: pegs[1] - pegs[0]}
+
+    def magic(p):
+        if p in magic_memo:
+            return magic_memo[p]
+        magic_memo[p] = pegs[p] - pegs[p - 1] - magic(p - 1)
+        return magic_memo[p]
+
+    magic_number = magic(n - 1)
+    if n % 2 == 0:
+        # x = 2/3 * [f - e - (e - d - (d - c - (c - b - (b - a))))]
+        g1 = Fraction(magic_number * 2, 3).limit_denominator()
+    else:
+        # x / 2 = (50 - 30 - (30 - 4 - x))
+        # x = 2 * (50 - 30 - (30 - 4 - x))
+        # -x = 2 * (50 - 30 - (30 - 4 ))
+        # -x = 2 * (50 - 30 - 26)
+        # -x = 2 * (-6)
+        # x = 12'
+        g1 = Fraction(-(magic_number * 2)).limit_denominator()
+    if g1 < 2 or g1 >= gap(0, 1):
+        return impossible
+    # verify
+    gears = [g1]
+    for i in range(1, n):
+        gear = pegs[i] - pegs[i - 1] - gears[i - 1]
+        if gear < 1:
+            return impossible
+        gears.append(gear)
+
+    counter = pegs[0]
+    prev = gears[0]
+    recon = [pegs[0]]
+    for i, gear in enumerate(gears[1:]):
+        counter += prev + gear
+        prev = gear
+        if not pegs[i + 1] - 0.001 <= counter <= pegs[i + 1] + 0.001:
+            return impossible
+        recon.append(counter)
+
+    # print(pegs, gears, recon)
+
+    return [g1.numerator, g1.denominator]
+
+    # verify
 
     max_table = []
     for i in range(n):
@@ -116,8 +175,8 @@ def solution(pegs):
     new_max = min(max_table[0], 2 * max_table[-1])
     new_min = max(min_table[0], 2 * min_table[-1], 1)
     if new_min == new_max:
-        n, d = simplify(new_min, 1)
-        return [n, d]
+        pass
+        # return simplify(new_min, 1)
     if new_min > new_max:
         return impossible
     min_table[0] = new_min
@@ -140,13 +199,13 @@ def solution(pegs):
                 max_table[i] = new_max
                 min_table[i] = new_min
         print(140, dict(zip(pegs, zip(min_table, max_table))))
-
+        continue
         # update first gear
         new_min = max(gap(0, 1) - max_table[1], 1)
         new_max = gap(0, 1) - min_table[1]
         if new_min > new_max:
-            print(146, new_min, new_max)
-            return impossible
+            # return impossible
+            pass
         if new_max != max_table[0] or new_min != min_table[0]:
             modify = True
             min_table[0] = new_min
@@ -156,8 +215,8 @@ def solution(pegs):
         new_min = max(gap(n - 2, n - 1) - max_table[-2], 1)
         new_max = gap(n - 2, n - 1) - min_table[-2]
         if new_min > new_max:
-            print(155, new_min, new_max)
-            return impossible
+            pass
+            # return impossible
         if new_max != max_table[-1] or new_min != min_table[-1]:
             modify = True
             min_table[-1] = new_min
@@ -168,8 +227,8 @@ def solution(pegs):
         new_max = min(max_table[0], 2 * max_table[-1])
         new_min = max(min_table[0], 2 * min_table[-1], 1)
         if new_min == new_max:
-            n, d = simplify(new_min, 1)
-            return [n, d]
+            pass
+            # return simplify(new_min, 1)
         if new_min > new_max:
             print(168, new_min, new_max)
             return impossible
@@ -183,16 +242,58 @@ def solution(pegs):
             min_table[-1] = new_min // 2
             max_table[-1] = new_max // 2
 
-    return dict(zip(pegs, zip(min_table, max_table)))
+    return simplify(g1, 1) if n % 2 else simplify(g1, 3)
+
+
+def random_testcase(n):
+    # p => [1, 10_000]
+    # n => [2, 20]
+    gears = [random.randint(1, 500) for _ in range(n)]
+    if gears[0] % 2 != 0:
+        gears[0] += 1
+    gears.append(gears[0] // 2)
+    p = [gears[0]]
+    counter = gears[0]
+    prev = gears[0]
+    for gear in gears[1:]:
+        counter += prev + gear
+        prev = gear
+        p.append(counter)
+    return p, [gears[0], 1]
 
 
 class TestCase(unittest.TestCase):
+    def test_10_17(self):
+        self.assertEqual(solution([10, 17]), [14, 3])
+
+    def test_10_21(self):
+        self.assertEqual(solution([10, 21]), [22, 3])
+
+    def test_10_23(self):
+        self.assertEqual(solution([10, 23]), [26, 3])
+
+    def test_10_27(self):
+        self.assertEqual(solution([10, 27]), [34, 3])
+
+    def test_10_29(self):
+        self.assertEqual(solution([10, 29]), [38, 3])
+
+    def test_10_33(self):
+        self.assertEqual(solution([10, 33]), [46, 3])
 
     def test_30_60(self):
         self.assertEqual(solution([30, 60]), [20, 1])
 
     def test_4_30_50(self):
         self.assertEqual(solution([4, 30, 50]), [12, 1])
+
+    def test_2_802_1392(self):
+        return
+        self.assertEqual(solution([2, 802, 1392]), [-1, -1])
+
+    def test_2_802_1394(self):
+        return
+        self.assertEqual(solution([2, 802, 1392]), [420, 1])
 
     def test_4_17_50(self):
         self.assertEqual(solution([4, 17, 50]), [-1, -1])
@@ -205,6 +306,23 @@ class TestCase(unittest.TestCase):
 
     def test_4_6_50_52_pegs_too_far(self):
         self.assertEqual(solution([4, 6, 50, 52]), [-1, -1])
+
+    def test_random(self):
+        random.seed(0)
+        # for _ in range(100000):
+        while False:
+            for n in range(1, 2):
+                inp, outp = random_testcase(n)
+                self.assertEqual(solution(inp), outp)
+        """
+        for n in range(2, 20):
+            for _ in range(10000):
+                inp, _ = random_testcase(n)
+                old = str(inp)
+                inp[random.randint(0, n - 1)] += 1
+                ans = solution(inp)
+                self.assertEqual(ans, [-1, -1], msg=str(ans) + " " + str(inp) + " " + old)
+        """
 
 
 if __name__ == "__main__":
